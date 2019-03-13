@@ -17,6 +17,15 @@
 #include <AutoConnect.h>
 #include <ThingerWifi.h>
 
+/*
+ * MH-Z19B
+ */
+#include <SoftwareSerial.h>
+#define pwmPin D8
+SoftwareSerial swSerial(D6, D7); // RX, TX
+unsigned long th, tl, ppm = 0, ppm2 = 0, ppm3 = 0, p1=0,p2=0, tpwm=0;
+
+
 Adafruit_BME280 bme; // I2C
 
 float h, t, p, pin, dp;
@@ -69,10 +78,38 @@ void rootPage() {
 void setup() {
 
   // Initializing serial port for debugging purposes
-  Serial.begin(115200);
+  Serial.begin(9600);
   delay(1000);
-  Wire.begin(D6, D5);
+  Wire.begin(D1, D2);
   Wire.setClock(100000);
+  
+  swSerial.begin(9600); 
+  th = pulseIn(pwmPin, HIGH, 3000000); // use microseconds
+  tl = pulseIn(pwmPin, LOW, 3000000);
+  tpwm = th + tl; // actual pulse width
+//  Serial.print("PWM-time: ");
+//  Serial.print(tpwm);
+//  Serial.println(" us");
+  p1 = tpwm/502; // start pulse width
+  p2 = tpwm/251; // start and end pulse width combined
+  th = pulseIn(pwmPin, HIGH, 3000000);
+  ppm3 = 5000 * (th-p1)/(tpwm-p2);
+  
+  byte setrangeA_cmd[9] = {0xFF, 0x01, 0x99, 0x00, 0x00, 0x00, 0x13, 0x88, 0xCB}; // задаёт диапазон 0 - 5000ppm
+  unsigned char setrangeA_response[9]; 
+  swSerial.write(setrangeA_cmd,9);
+  swSerial.readBytes(setrangeA_response, 9);
+  int setrangeA_i;
+  byte setrangeA_crc = 0;
+  for (setrangeA_i = 1; setrangeA_i < 8; setrangeA_i++) setrangeA_crc+=setrangeA_response[setrangeA_i];
+  setrangeA_crc = 255 - setrangeA_crc;
+  setrangeA_crc += 1;
+  if ( !(setrangeA_response[0] == 0xFF && setrangeA_response[1] == 0x99 && setrangeA_response[8] == setrangeA_crc) ) {
+    Serial.println("Range CRC error: " + String(setrangeA_crc) + " / "+ String(setrangeA_response[8]) + " (bytes 6 and 7)");
+  } else {
+    Serial.println("Range was set! (bytes 6 and 7)");
+  }
+  
   
   // Behavior a root path of ESP8266WebServer.
 //  Server.on("/", rootPage);
@@ -117,6 +154,61 @@ void getWeather() {
  
 }
 
+void getCo2ppm() {
+  th = pulseIn(pwmPin, HIGH, 3000000); // use microseconds
+  tl = pulseIn(pwmPin, LOW, 3000000);
+  tpwm = th + tl; // actual pulse width
+//  Serial.print("PWM-time: ");
+//  Serial.print(tpwm);
+//  Serial.println(" us");
+  p1 = tpwm/502; // start pulse width
+  p2 = tpwm/251; // start and end pulse width combined
+  th = pulseIn(pwmPin, HIGH, 3000000);
+  ppm = 5000 * (th-p1)/(tpwm-p2);
+
+  byte measure_cmd[9] = {0xFF,0x01,0x86,0x00,0x00,0x00,0x00,0x00,0x79};
+  unsigned char measure_response[9]; 
+//  unsigned long th, tl, ppm = 0, ppm2 = 0, ppm3 = 0;
+
+  // ***** узнаём концентрацию CO2 через UART: ***** 
+  swSerial.write(measure_cmd,9);
+  swSerial.readBytes(measure_response, 9);
+  int i;
+  byte crc = 0;
+  for (i = 1; i < 8; i++) crc+=measure_response[i];
+  crc = 255 - crc;
+  crc += 1;
+  if ( !(measure_response[0] == 0xFF && measure_response[1] == 0x86 && measure_response[8] == crc) ) {
+    Serial.println("CRC error: " + String(crc) + " / "+ String(measure_response[8]));
+  } 
+  unsigned int responseHigh = (unsigned int) measure_response[2];
+  unsigned int responseLow = (unsigned int) measure_response[3];
+  ppm = (256*responseHigh) + responseLow;
+
+  // *****  узнаём концентрацию CO2 через PWM: ***** 
+  int waitCounter = 1;
+  do {
+    th = pulseIn(pwmPin, HIGH, 1004000) / 1000;
+//    th = digitalRead(pwmPin);
+    tl = 1004 - th;
+//    ppm2 =  2000 * (th-2)/(th+tl-4); // расчёт для диапазона от 0 до 2000ppm 
+    ppm3 =  5000 * (th-2)/(th+tl-4); // расчёт для диапазона от 0 до 5000ppm 
+    waitCounter++;
+    if (waitCounter > 5) {
+      waitCounter = -1;
+    }
+    Serial.print("w..");
+    Serial.println(waitCounter);
+
+ } while (th == 0 && waitCounter > 0);
+
+  Serial.print("PPM: ");
+  Serial.println(ppm);
+  Serial.print("PPM3: ");
+  Serial.println(ppm3);
+
+}
+
 bool thingerConfigured = false;
 // runs over and over again
 void loop() {
@@ -129,7 +221,6 @@ void loop() {
   if (WiFi.status() == WL_CONNECTED && !thingerConfigured) {
     // Printing the ESP IP address
     Serial.println(WiFi.localIP());
-    Serial.println(F("BME280 test"));
   
     if (!bme.begin()) {
       Serial.println("Could not find a valid BME280 sensor, check wiring!");
@@ -143,12 +234,14 @@ void loop() {
     thing["led"] << digitalPin(LED_BUILTIN);
     thing["temperature"] >> outputValue(t);
     thing["humidity"] >> outputValue(h);
-    thing["pressure"] >> outputValue(p);// Starting the web server
+    thing["pressure"] >> outputValue(p);
+    thing["co2ppm"] >> outputValue(ppm3);
     thingerConfigured = true;
     delay(10000); 
   }
   
   getWeather();
+  getCo2ppm();
   thing.handle();
   
 //  // Listenning for new clients
