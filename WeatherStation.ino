@@ -15,7 +15,8 @@
 #include "Adafruit_BME280.h"
 #include <time.h>
 #include <AutoConnect.h>
-#include <ThingerWifi.h>
+#include <WiFiClient.h>
+//#include <ThingerWifi.h>
 
 /*
  * MH-Z19B
@@ -45,7 +46,11 @@ AutoConnectConfig   Config;       // Enable autoReconnect supported on v0.9.4
 #define NTPServer1  "ntp.nict.jp" // NICT japan.
 #define NTPServer2  "time1.google.com"
 
-ThingerWifi thing("mryu", "test1", "123456");
+const char host[] = "10.16.84.182"; //"10.16.84.182"; //"vapor-weather.herokuapp.com";//"10.16.84.182"; //
+const int httpsPort = 80;
+WiFiClient client;//(host, 443);
+#define SamplingDelay (1000*1)
+const char* fingerprint = "08 3B 71 72 02 43 6E CA ED 42 86 93 BA 7E DF 81 C4 BC 62 30";
 
 void rootPage() {
   String  content = 
@@ -109,8 +114,7 @@ void setup() {
   } else {
     Serial.println("Range was set! (bytes 6 and 7)");
   }
-  
-  
+
   // Behavior a root path of ESP8266WebServer.
 //  Server.on("/", rootPage);
 
@@ -168,7 +172,6 @@ void getCo2ppm() {
 
   byte measure_cmd[9] = {0xFF,0x01,0x86,0x00,0x00,0x00,0x00,0x00,0x79};
   unsigned char measure_response[9]; 
-//  unsigned long th, tl, ppm = 0, ppm2 = 0, ppm3 = 0;
 
   // ***** узнаём концентрацию CO2 через UART: ***** 
   swSerial.write(measure_cmd,9);
@@ -200,7 +203,7 @@ void getCo2ppm() {
     Serial.print("w..");
     Serial.println(waitCounter);
 
- } while (th == 0 && waitCounter > 0);
+  } while (th == 0 && waitCounter > 0);
 
   Serial.print("PPM: ");
   Serial.println(ppm);
@@ -209,16 +212,78 @@ void getCo2ppm() {
 
 }
 
-bool thingerConfigured = false;
+void post() {
+  Serial.print("connecting to host: ");
+  Serial.println(host);
+//  Serial.printf("Using fingerprint '%s'\n", fingerprint);
+//  client.setFingerprint(fingerprint);
+  if (!client.connect(host, httpsPort)) {
+    Serial.println("connection failed");
+    return;
+  }
+  Serial.print("Connected to: ");
+  Serial.println(host);
+
+  String postData="humidity=";
+  postData = postData + String(h) + "&co2=";
+  postData = postData + String(ppm3) + "&temp=";
+  postData = postData + String(t) + "&pressure=";
+  postData = postData + String(p) + "";
+//  Serial.println(postData);
+
+//  if (client.verify(fingerprint, host)) {
+//    Serial.println("certificate matches");
+//  } else {
+//    Serial.println("certificate doesn't match");
+//  }
+  String request = "POST /sensors HTTP/1.1\n\r";
+  request = request + "Host: " + String(host) + "\n\r";
+  request = request + "User-Agent: Arduino/1.0" + "\n\r";
+  request = request + "Cache-Control: no-cache" + "\n\r";
+  request = request + "Content-Length: " + String(postData.length()) + "\n\r";
+  request = request + "Content-Type: application/x-www-form-urlencoded" + "\n\r";
+  request = request + postData + "\n\r";
+  client.println("POST /sensors HTTP/1.1");
+  client.println("Host: " + String(host));
+//  client.println("Accept: */*");
+  client.println("User-Agent: Arduino/1.0");
+//  client.println("Connection: close");
+  client.println("Cache-Control: no-cache");
+  client.print("Content-Length: ");
+  client.println(postData.length());
+  client.println("Content-Type: application/x-www-form-urlencoded;");
+  client.println(postData);
+  client.println("\r\n\r\n");
+  Serial.println(request);
+//  client.print(request);
+//
+//  while (client.connected()) {
+//    String line = client.readStringUntil('\n');
+//    if (line == "\r") {
+//      Serial.println("headers received");
+//      break;
+//    }
+//  }
+//  String line = client.readStringUntil('\n'); 
+//  Serial.println(line);
+
+  // Close the connection
+  Serial.println();
+//  Serial.println("closing connection");
+//  client.stop();
+}
+
+//bool thingerConfigured = false;
 // runs over and over again
 void loop() {
   Portal.handleClient();
+  
   if (WiFi.status() == WL_IDLE_STATUS) {
     ESP.reset();
     delay(1000);
   }
 
-  if (WiFi.status() == WL_CONNECTED && !thingerConfigured) {
+  if (WiFi.status() == WL_CONNECTED) {
     // Printing the ESP IP address
     Serial.println(WiFi.localIP());
   
@@ -226,73 +291,11 @@ void loop() {
       Serial.println("Could not find a valid BME280 sensor, check wiring!");
       while (1);
     }
-
-    const char* ssid = WiFi.SSID().c_str();
-    const char* psk = WiFi.psk().c_str();
-    thing.add_wifi(ssid, psk);
     pinMode(LED_BUILTIN, OUTPUT);
-    thing["led"] << digitalPin(LED_BUILTIN);
-    thing["temperature"] >> outputValue(t);
-    thing["humidity"] >> outputValue(h);
-    thing["pressure"] >> outputValue(p);
-    thing["co2ppm"] >> outputValue(ppm3);
-    thingerConfigured = true;
-    delay(10000); 
+    delay(SamplingDelay); 
   }
-  
+
   getWeather();
   getCo2ppm();
-  thing.handle();
-  
-//  // Listenning for new clients
-//  WiFiClient client = server.available();
-//  
-//  if (client) {
-//    Serial.println("New client");
-//    // bolean to locate when the http request ends
-//    boolean blank_line = true;
-//    while (client.connected()) {
-//      if (client.available()) {
-//        char c = client.read();
-//        
-//        if (c == '\n' && blank_line) {
-//            
-//            client.println("HTTP/1.1 200 OK");
-//            client.println("Content-Type: text/html");
-//            client.println("Connection: close");
-//            client.println();
-//            // your actual web page that displays temperature
-//            client.println("<!DOCTYPE HTML>");
-//            client.println("<html>");
-//            client.println("<head><META HTTP-EQUIV=\"refresh\" CONTENT=\"15\"></head>");
-//            client.println("<body><h1>ESP8266 Weather Web Server</h1>");
-//            client.println("<table border=\"2\" width=\"456\" cellpadding=\"10\"><tbody><tr><td>");
-//            client.println("<h3>Temperature = ");
-//            client.println(temperatureFString);
-//            client.println("&deg;C</h3><h3>Humidity = ");
-//            client.println(humidityString);
-//            client.println("%</h3><h3>Approx. Dew Point = ");
-//            client.println(dpString);
-//            client.println("&deg;C</h3><h3>Pressure = ");
-//            client.println(pressureString);
-//            client.println("hPa (");
-//            client.println(pressureInchString);
-//            client.println("Inch)</h3></td></tr></tbody></table></body></html>");  
-//            break;
-//        }
-//        if (c == '\n') {
-//          // when starts reading a new line
-//          blank_line = true;
-//        }
-//        else if (c != '\r') {
-//          // when finds a character on the current line
-//          blank_line = false;
-//        }
-//      }
-//    }  
-//    // closing the client connection
-//    delay(1);
-//    client.stop();
-//    Serial.println("Client disconnected.");
-//  }
+  post(); 
 } 
