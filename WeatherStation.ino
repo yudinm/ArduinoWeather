@@ -6,7 +6,7 @@
   Modified code from Rui Santos' Temperature Weather Server posted on http://randomnerdtutorials.com  
 *********/
 #define _DEBUG_
-#define _DISABLE_TLS_
+//#define _DISABLE_TLS_
 
 #include <Wire.h>
 #include <ESP8266WiFi.h>
@@ -46,10 +46,10 @@ AutoConnectConfig   Config;       // Enable autoReconnect supported on v0.9.4
 #define NTPServer1  "ntp.nict.jp" // NICT japan.
 #define NTPServer2  "time1.google.com"
 
-const char host[] = "10.16.84.182"; //"10.16.84.182"; //"vapor-weather.herokuapp.com";//"10.16.84.182"; //
+const char host[] = "10.16.84.182"; // "vapor-weather.herokuapp.com";//"10.16.84.182"; //
 const int httpsPort = 80;
 WiFiClient client;//(host, 443);
-#define SamplingDelay (1000*1)
+#define SamplingDelay (1000*60)
 const char* fingerprint = "08 3B 71 72 02 43 6E CA ED 42 86 93 BA 7E DF 81 C4 BC 62 30";
 
 void rootPage() {
@@ -236,26 +236,26 @@ void post() {
 //  } else {
 //    Serial.println("certificate doesn't match");
 //  }
-  String request = "POST /sensors HTTP/1.1\n\r";
-  request = request + "Host: " + String(host) + "\n\r";
-  request = request + "User-Agent: Arduino/1.0" + "\n\r";
-  request = request + "Cache-Control: no-cache" + "\n\r";
-  request = request + "Content-Length: " + String(postData.length()) + "\n\r";
-  request = request + "Content-Type: application/x-www-form-urlencoded" + "\n\r";
-  request = request + postData + "\n\r";
-  client.println("POST /sensors HTTP/1.1");
-  client.println("Host: " + String(host));
-//  client.println("Accept: */*");
-  client.println("User-Agent: Arduino/1.0");
-//  client.println("Connection: close");
-  client.println("Cache-Control: no-cache");
-  client.print("Content-Length: ");
-  client.println(postData.length());
-  client.println("Content-Type: application/x-www-form-urlencoded;");
-  client.println(postData);
-  client.println("\r\n\r\n");
+  String request = "POST /sensors HTTP/1.1\r\n";
+  request = request + "Host: " + String(host) + "\r\n";
+  request = request + "User-Agent: Arduino/1.0" + "\r\n";
+  request = request + "Cache-Control: no-cache" + "\r\n";
+  request = request + "Content-Length: " + String(postData.length()) + "\r\n";
+  request = request + "Content-Type: application/x-www-form-urlencoded" + "\r\n\r\n";
+  request = request + postData + "\r\n";
+//  client.println("POST /sensors HTTP/1.1");
+//  client.println("Host: " + String(host));
+////  client.println("Accept: */*");
+//  client.println("User-Agent: Arduino/1.0");
+////  client.println("Connection: close");
+//  client.println("Cache-Control: no-cache");
+//  client.print("Content-Length: ");
+//  client.println(postData.length());
+//  client.println("Content-Type: application/x-www-form-urlencoded;");
+//  client.println(postData);
+//  client.println("\r\n\r\n");
   Serial.println(request);
-//  client.print(request);
+  client.print(request);
 //
 //  while (client.connected()) {
 //    String line = client.readStringUntil('\n');
