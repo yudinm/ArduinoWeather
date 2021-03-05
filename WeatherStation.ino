@@ -8,7 +8,7 @@
 #define _DEBUG_
 #define _DISABLE_TLS_
 
-#define _HAS_Z19B_CO2_SENSOR_
+//#define _HAS_Z19B_CO2_SENSOR_
 #define _HAS_BME280_WEATHER_SENSOR_
 
 #include <Wire.h>
@@ -247,13 +247,17 @@ void post() {
 #ifdef _HAS_BME280_WEATHER_SENSOR_
   postData = postData + "\"hum\":" + String(h) + ",";
   postData = postData + "\"tem\":" + String(t) + ",";
-  postData = postData + "\"pre\":" + String(p) + ",";
+  postData = postData + "\"pre\":" + String(p);
+#ifdef _HAS_Z19B_CO2_SENSOR_
+  postData = postData + ",";
+#endif  
 #endif
-#ifdef _HAS_BME280_WEATHER_SENSOR_
-  postData = postData + "\"co2\":" + String(ppm3) + ",";
+#ifdef _HAS_Z19B_CO2_SENSOR_
+  postData = postData + "\"co2\":" + String(ppm3);
 #endif
   postData = postData + "}";
-  
+  Serial.println(postData); 
+   
   auto httpCode = http.POST(postData); 
   Serial.println(httpCode); //Print HTTP return code 
 
