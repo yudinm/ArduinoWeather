@@ -46,14 +46,14 @@ ESP8266WebServer    Server;
 AutoConnect         Portal(Server);
 AutoConnectConfig   Config;       // Enable autoReconnect supported on v0.9.4
 
-#define TIMEZONE    (3600 * 9)    // Tokyo
-#define NTPServer1  "ntp.nict.jp" // NICT japan.
+#define TIMEZONE    (3600 * 3)    // Moscow
+#define NTPServer1  "0.ru.pool.ntp.org" // 
 #define NTPServer2  "time1.google.com"
 
 const char host[]     = "192.168.31.160";//"10.16.84.182"; //"10.16.84.182"; //"vapor-weather.herokuapp.com";//"10.16.84.182"; //
 const int httpsPort   = 80;
 WiFiClient client;//(host, 443);
-#define SamplingDelay (1000*6)
+#define SamplingDelay (1000*6*3)
 const char* fingerprint = "08 3B 71 72 02 43 6E CA ED 42 86 93 BA 7E DF 81 C4 BC 62 30";
 
 const String device_id    = "T_P_H_1";
@@ -95,9 +95,11 @@ void setup() {
   delay(1000);
   Wire.begin(D1, D2);
   Wire.setClock(100000);
+  pinMode(LED_BUILTIN, OUTPUT);
+  pinMode(LED_BUILTIN, LOW);
   
-  swSerial.begin(9600); 
 #ifdef _HAS_Z19B_CO2_SENSOR_  
+  swSerial.begin(9600); 
   th = pulseIn(pwmPin, HIGH, 3000000); // use microseconds
   tl = pulseIn(pwmPin, LOW, 3000000);
   tpwm = th + tl; // actual pulse width
@@ -298,13 +300,14 @@ void loop() {
   
     if (!bme.begin()) {
       Serial.println("Could not find a valid BME280 sensor, check wiring!");
+      pinMode(LED_BUILTIN, HIGH);
       while (1);
     }
-    pinMode(LED_BUILTIN, OUTPUT);
     delay(SamplingDelay); 
   }
 
   getWeather();
   getCo2ppm();
   post(); 
+  pinMode(LED_BUILTIN, LOW);
 } 
