@@ -53,7 +53,7 @@ AutoConnectConfig   Config;       // Enable autoReconnect supported on v0.9.4
 const char host[]     = "192.168.31.160";//"10.16.84.182"; //"10.16.84.182"; //"vapor-weather.herokuapp.com";//"10.16.84.182"; //
 const int httpsPort   = 80;
 WiFiClient client;//(host, 443);
-#define SamplingDelay (1000*6*3)
+#define SamplingDelay (30e6) //(1000*6*9)
 const char* fingerprint = "08 3B 71 72 02 43 6E CA ED 42 86 93 BA 7E DF 81 C4 BC 62 30";
 
 const String device_id    = "T_P_H_1";
@@ -244,7 +244,7 @@ void post() {
   http.begin("http://" + String(host) + ":80/sensors/push_data"); 
   http.addHeader("Content-Type", "application/x-www-form-urlencoded"); 
   
-  String postData="device_id=" + device_id + "&name=" + device_name + "&data=";
+  String postData="device_id=" + device_id + "&name=" + device_name + "&local_ip=" + WiFi.localIP().toString() + "&data=";
   postData = postData + "{";
 #ifdef _HAS_BME280_WEATHER_SENSOR_
   postData = postData + "\"hum\":" + String(h) + ",";
@@ -303,11 +303,11 @@ void loop() {
       pinMode(LED_BUILTIN, HIGH);
       while (1);
     }
-    delay(SamplingDelay); 
+  //    delay(SamplingDelay); 
+    getWeather();
+    getCo2ppm();
+    post(); 
+    pinMode(LED_BUILTIN, LOW);
+    ESP.deepSleep(SamplingDelay);
   }
-
-  getWeather();
-  getCo2ppm();
-  post(); 
-  pinMode(LED_BUILTIN, LOW);
 } 
