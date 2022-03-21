@@ -8,7 +8,7 @@
 #define _DEBUG_
 #define _DISABLE_TLS_
 
-//#define _HAS_Z19B_CO2_SENSOR_
+#define _HAS_Z19B_CO2_SENSOR_
 #define _HAS_BME280_WEATHER_SENSOR_
 
 #include <Wire.h>
@@ -20,8 +20,16 @@
 #include <AutoConnect.h>
 #include <ESP8266HTTPClient.h> 
 
-//#include <WiFiClient.h>
-//#include <ThingerWifi.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+
+#define SCREEN_WIDTH 128 // OLED display width, in pixels
+#define SCREEN_HEIGHT 64 // OLED display height, in pixels
+
+// Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
+#define OLED_RESET     -1 // Reset pin # (or -1 if sharing Arduino reset pin)
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
 
 /*
  * MH-Z19B
@@ -53,11 +61,11 @@ AutoConnectConfig   Config;       // Enable autoReconnect supported on v0.9.4
 const char host[]     = "192.168.31.160";//"10.16.84.182"; //"10.16.84.182"; //"vapor-weather.herokuapp.com";//"10.16.84.182"; //
 const int httpsPort   = 80;
 WiFiClient client;//(host, 443);
-#define SamplingDelay (30e6) //(1000*6*9)
+#define SamplingDelay (1000*6*3) //(30e6)
 const char* fingerprint = "08 3B 71 72 02 43 6E CA ED 42 86 93 BA 7E DF 81 C4 BC 62 30";
 
-const String device_id    = "T_P_H_1";
-const String device_name  = "Weather_station_TPH1";
+const String device_id    = "T_P_H_CO2_1";
+const String device_name  = "Weather_station_TPHCO2";
 
 
 void rootPage() {
@@ -97,6 +105,16 @@ void setup() {
   Wire.setClock(100000);
   pinMode(LED_BUILTIN, OUTPUT);
   pinMode(LED_BUILTIN, LOW);
+  if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { 
+    Serial.println("SSD1306 allocation failed");
+    for(;;);
+  }
+  display.clearDisplay();
+  display.setTextSize(1);             
+  display.setTextColor(WHITE);        
+  display.setCursor(0,20);             
+  display.println("Hello, world!");
+  display.display();
   
 #ifdef _HAS_Z19B_CO2_SENSOR_  
   swSerial.begin(9600); 
@@ -240,9 +258,9 @@ void post() {
   Serial.print("Connected to: ");
   Serial.println(host);
 
-  HTTPClient http;
-  http.begin("http://" + String(host) + ":80/sensors/push_data"); 
-  http.addHeader("Content-Type", "application/x-www-form-urlencoded"); 
+  HTTPClient httpClient;
+  httpClient.begin("http://" + String(host) + ":80/sensors/push_data"); 
+  httpClient.addHeader("Content-Type", "application/x-www-form-urlencoded"); 
   
   String postData="device_id=" + device_id + "&name=" + device_name + "&local_ip=" + WiFi.localIP().toString() + "&data=";
   postData = postData + "{";
@@ -260,10 +278,10 @@ void post() {
   postData = postData + "}";
   Serial.println(postData); 
    
-  auto httpCode = http.POST(postData); 
+  auto httpCode = httpClient.POST(postData); 
   Serial.println(httpCode); //Print HTTP return code 
 
-  String payload = http.getString(); 
+  String payload = httpClient.getString(); 
   Serial.println(payload); //Print request response payload 
 
 //  while (client.connected()) {
@@ -278,10 +296,11 @@ void post() {
 
   // Close the connection
   Serial.println();
-  http.end(); //Close connection Serial.println(); 
+  httpClient.end(); //Close connection Serial.println(); 
   Serial.println("closing connection");
-
   client.stop();
+
+  display.println("CO2: "+String(ppm3));
 }
 
 //bool thingerConfigured = false;
@@ -303,11 +322,11 @@ void loop() {
       pinMode(LED_BUILTIN, HIGH);
       while (1);
     }
-  //    delay(SamplingDelay); 
     getWeather();
     getCo2ppm();
     post(); 
     pinMode(LED_BUILTIN, LOW);
-    ESP.deepSleep(SamplingDelay);
+//    ESP.deepSleep(SamplingDelay);
+    delay(SamplingDelay); 
   }
 } 
